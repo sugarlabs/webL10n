@@ -23,7 +23,7 @@
 /*jshint browser: true, devel: true, es5: true, globalstrict: true */
 'use strict';
 
-document.webL10n = (function(window, document, undefined) {
+define(function (require) {
   var gL10nData = {};
   var gTextData = '';
   var gTextProp = 'textContent';
@@ -953,182 +953,77 @@ document.webL10n = (function(window, document, undefined) {
     translateElement(element);
   }
 
+  // Startup & Public API
 
-  /**
-   * Startup & Public API
-   *
-   * Warning: this part of the code contains browser-specific chunks --
-   * that's where obsolete browsers, namely IE8 and earlier, are handled.
-   *
-   * Unlike the rest of the lib, this section is not shared with FirefoxOS/Gaia.
-   */
+  function l10nStartup() {
+    gReadyState = 'interactive';
+    consoleLog('loading [' + navigator.language + '] resources, ' +
+        (gAsyncResourceLoading ? 'asynchronously.' : 'synchronously.'));
 
-  // browser-specific startup
-  if (document.addEventListener) { // modern browsers and IE9+
-    document.addEventListener('DOMContentLoaded', function() {
-      var lang = document.documentElement.lang || navigator.language;
-      loadLocale(lang, translateFragment);
-    }, false);
-  } else if (window.attachEvent) { // IE8 and before (= oldIE)
-    // TODO: check if jQuery is loaded (CSS selector + JSON + events)
-
-    // dummy `console.log' and `console.warn' functions
-    if (!window.console) {
-      consoleLog = function(message) {}; // just ignore console.log calls
-      consoleWarn = function(message) {
-        if (gDEBUG) {
-          alert('[l10n] ' + message); // vintage debugging, baby!
-        }
-      };
+    // load the default locale and translate the document if required
+    if (document.documentElement.lang === navigator.language) {
+      loadLocale(navigator.language);
+    } else {
+      loadLocale(navigator.language, translateFragment);
     }
-
-    // XMLHttpRequest for IE6
-    if (!window.XMLHttpRequest) {
-      xhrLoadText = function(url, onSuccess, onFailure, asynchronous) {
-        onSuccess = onSuccess || function _onSuccess(data) {};
-        onFailure = onFailure || function _onFailure() {
-          consoleWarn(url + ' not found.');
-        };
-        var xhr = new ActiveXObject('Microsoft.XMLHTTP');
-        xhr.open('GET', url, asynchronous);
-        xhr.onreadystatechange = function() {
-          if (xhr.readyState == 4) {
-            if (xhr.status == 200) {
-              onSuccess(xhr.responseText);
-            } else {
-              onFailure();
-            }
-          }
-        };
-        xhr.send(null);
-      }
-    }
-
-    // worst hack ever for IE6 and IE7
-    if (!window.JSON) {
-      getL10nAttributes = function(element) {
-        if (!element)
-          return {};
-        var l10nId = element.getAttribute('data-l10n-id'),
-            l10nArgs = element.getAttribute('data-l10n-args'),
-            args = {};
-        if (l10nArgs) try {
-          args = eval(l10nArgs); // XXX yeah, I know...
-        } catch (e) {
-          consoleWarn('could not parse arguments for #' + l10nId);
-        }
-        return { id: l10nId, args: args };
-      };
-    }
-
-    // override `getTranslatableChildren' and `getL10nResourceLinks'
-    if (!document.querySelectorAll) {
-      getTranslatableChildren = function(element) {
-        if (!element)
-          return [];
-        var nodes = element.getElementsByTagName('*'),
-            l10nElements = [],
-            n = nodes.length;
-        for (var i = 0; i < n; i++) {
-          if (nodes[i].getAttribute('data-l10n-id'))
-            l10nElements.push(nodes[i]);
-        }
-        return l10nElements;
-      };
-      getL10nResourceLinks = function() {
-        var links = document.getElementsByTagName('link'),
-            l10nLinks = [],
-            n = links.length;
-        for (var i = 0; i < n; i++) {
-          if (links[i].type == 'application/l10n')
-            l10nLinks.push(links[i]);
-        }
-        return l10nLinks;
-      };
-    }
-
-    // override `getL10nDictionary'
-    if (!window.JSON || !document.querySelectorAll) {
-      getL10nDictionary = function() {
-        var scripts = document.getElementsByName('script');
-        for (var i = 0; i < scripts.length; i++) {
-          if (scripts[i].type == 'application/l10n') {
-            return eval(scripts[i].innerHTML);
-          }
-        }
-        return null;
-      };
-    }
-
-    // fire non-standard `localized' DOM events
-    if (document.createEventObject && !document.createEvent) {
-      fireL10nReadyEvent = function(lang) {
-        // hack to simulate a custom event in IE:
-        // to catch this event, add an event handler to `onpropertychange'
-        document.documentElement.localized = 1;
-      };
-    }
-
-    // startup for IE<9
-    window.attachEvent('onload', function() {
-      gTextProp = document.body.textContent ? 'textContent' : 'innerText';
-      var lang = document.documentElement.lang || window.navigator.userLanguage;
-      loadLocale(lang, translateFragment);
-    });
   }
 
-  // cross-browser API (sorry, oldIE doesn't support getters & setters)
-  return {
+  // public API
+  var l10n = {
+    start: function() {
+      if (document.readyState === 'complete' ||
+        document.readyState === 'interactive') {
+        window.setTimeout(l10nStartup);
+      } else {
+        document.addEventListener('DOMContentLoaded', l10nStartup);
+      }
+    },
+
     // get a localized string
-    get: function(key, args, fallback) {
+    get: function l10n_get(key, args, fallback) {
       var data = getL10nData(key, args) || fallback;
-      if (data) { // XXX double-check this
-        return gTextProp in data ? data[gTextProp] : '';
+      if (data) {
+        return 'textContent' in data ? data.textContent : '';
       }
       return '{{' + key + '}}';
     },
 
-    // debug
-    getData: function() { return gL10nData; },
-    getText: function() { return gTextData; },
+    // get|set the document language and direction
+    get language() {
+      return {
+        // get|set the document language (ISO-639-1)
+        get code() { return gLanguage; },
+        set code(lang) { loadLocale(lang, translateFragment); },
 
-    // get|set the document language
-    getLanguage: function() { return gLanguage; },
-    setLanguage: function(lang) { loadLocale(lang, translateFragment); },
-
-    // get the direction (ltr|rtl) of the current language
-    getDirection: function() {
-      // http://www.w3.org/International/questions/qa-scripts
-      // Arabic, Hebrew, Farsi, Pashto, Urdu
-      var rtlList = ['ar', 'he', 'fa', 'ps', 'ur'];
-      return (rtlList.indexOf(gLanguage) >= 0) ? 'rtl' : 'ltr';
+        // get the direction (ltr|rtl) of the current language
+        get direction() {
+          // http://www.w3.org/International/questions/qa-scripts
+          // Arabic, Hebrew, Farsi, Pashto, Urdu
+          var rtlList = ['ar', 'he', 'fa', 'ps', 'ur'];
+          return (rtlList.indexOf(gLanguage) >= 0) ? 'rtl' : 'ltr';
+        }
+      };
     },
 
     // translate an element or document fragment
     translate: translateFragment,
 
+    // get (a clone of) the dictionary for the current locale
+    get dictionary() { return JSON.parse(JSON.stringify(gL10nData)); },
+
     // this can be used to prevent race conditions
-    getReadyState: function() { return gReadyState; },
-    ready: function(callback) {
-      if (!callback) {
+    get readyState() { return gReadyState; },
+    ready: function l10n_ready(callback) {
+      if (!callback)
         return;
-      } else if (gReadyState == 'complete' || gReadyState == 'interactive') {
+
+      if (gReadyState == 'complete') {
         window.setTimeout(callback);
-      } else if (document.addEventListener) {
-        document.addEventListener('localized', callback);
-      } else if (document.attachEvent) {
-        document.documentElement.attachEvent('onpropertychange', function(e) {
-          if (e.propertyName === 'localized') {
-            callback();
-          }
-        });
+      } else {
+        window.addEventListener('localized', callback);
       }
     }
   };
-}) (window, document);
 
-// gettext-like shortcut for navigator.webL10n.get
-if (window._ === undefined) {
-  var _ = document.webL10n.get;
-}
-
+  return l10n;
+});

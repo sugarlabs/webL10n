@@ -1,0 +1,7 @@
+{
+    "name": "l10n",
+    "main": "l10n.js",
+    "volo": {
+        "ignore": "LOL"
+    }
+}
