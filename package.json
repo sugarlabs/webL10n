@@ -1,6 +1,6 @@
 {
-    "name": "l10n",
-    "main": "l10n.js",
+    "name": "webL10n",
+    "main": "webL10n.js",
     "volo": {
         "ignore": "LOL"
     }
